@@ -52,7 +52,7 @@ class ProductsTab(BoxLayout):
             halign='left', 
             font_size=dp(16), 
             padding=[dp(10), dp(10), dp(10), dp(10)],
-            hint_text="Введите название, GTIN или №..."
+            hint_text="Введите название или GTIN..."
         )
         self.search_input.bind(text=self.on_search)
         search_box.add_widget(self.search_input)
@@ -68,7 +68,7 @@ class ProductsTab(BoxLayout):
         self.add_widget(header)
 
         # --- Список товаров (Таблица) ---
-        self.scroll_view = ScrollView()  # <-- Сохраняем ссылку на ScrollView
+        self.scroll_view = ScrollView()
         self.list_layout = GridLayout(cols=1, size_hint_y=None, spacing=1)
         self.list_layout.bind(minimum_height=self.list_layout.setter('height'))
         self.scroll_view.add_widget(self.list_layout)
@@ -81,30 +81,38 @@ class ProductsTab(BoxLayout):
         self.refresh()
 
     def refresh(self):
-        """Обновляет таблицу с учетом поискового запроса."""
+        """Обновляет таблицу с учетом поискового запроса и сквозной нумерацией."""
         self.list_layout.clear_widgets()
         
-        # Получаем текст из поисковой строки и переводим в нижний регистр
         search_query = self.search_input.text.strip().lower()
+        all_products = db.get_products()
         
-        for pid, name, vol, gtin in db.get_products():
-            # Если есть поисковый запрос, проверяем совпадение по названию, GTIN или номеру
+        # 1. Сначала фильтруем список товаров
+        filtered_products = []
+        for pid, name, vol, gtin in all_products:
             if search_query:
+                # Ищем только по названию и GTIN (поиск по ID убран, т.к. номер теперь сквозной)
                 if (search_query not in name.lower() and 
-                    search_query not in gtin.lower() and 
-                    search_query not in str(pid)):
-                    continue # Пропускаем строку, если совпадений нет
+                    search_query not in gtin.lower()):
+                    continue
+            filtered_products.append((pid, name, vol, gtin))
 
+        # 2. Выводим отфильтрованный список со сквозной нумерацией
+        for display_index, (pid, name, vol, gtin) in enumerate(filtered_products, start=1):
             row = BoxLayout(size_hint_y=None, height=dp(40), spacing=1)
-            row.add_widget(GridCell(text=str(pid), size_hint_x=None, width=dp(50)))
+            
+            # Отображаем сквозной порядковый номер (1, 2, 3...)
+            row.add_widget(GridCell(text=str(display_index), size_hint_x=None, width=dp(50)))
             row.add_widget(GridCell(text=name, align='left'))
             row.add_widget(GridCell(text=vol, size_hint_x=None, width=dp(80)))
             row.add_widget(GridCell(text=gtin, size_hint_x=None, width=dp(160)))
             
             btn_box = BoxLayout(spacing=1, size_hint_x=None, width=dp(200))
             eb = styled_button("Изменить", (0.2, 0.5, 0.9, 1))
+            # Для действий передаем скрытый настоящий pid
             eb.bind(on_press=lambda b, p=(pid, name, vol, gtin): self.start_edit(*p))
             db_btn = styled_button("Удалить", (0.9, 0.3, 0.3, 1))
+            # Для удаления передаем скрытый настоящий pid
             db_btn.bind(on_press=lambda b, p=pid: self.do_delete(p))
             btn_box.add_widget(eb)
             btn_box.add_widget(db_btn)
