@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os
+import re
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
@@ -10,6 +11,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
 from widgets import GridCell, styled_button, FilePathBox
 from utils import sanitize_filename, read_lines
+from kivy.core.clipboard import Clipboard
 import db
 
 class SplitterTab(BoxLayout):
@@ -103,6 +105,83 @@ class SplitterTab(BoxLayout):
         ok.bind(on_press=select)
         popup.open()
 
+    def _show_missing_popup(self, missing_gtins):
+        """Показывает прокручиваемое окно со списком GTIN, отсутствующих в базе."""
+        content = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
+        
+        title_lbl = Label(
+            text="В файле обнаружены товары, которых нет в базе:",
+            size_hint_y=None, height=dp(35),
+            halign='center', valign='middle', font_size=dp(15)
+        )
+        title_lbl.bind(size=lambda s, v: setattr(s, 'text_size', (v[0], v[1])))
+        content.add_widget(title_lbl)
+        
+        # Подсказка для пользователя
+        hint_lbl = Label(
+            text="(Нажмите на GTIN, чтобы скопировать)",
+            size_hint_y=None, height=dp(20),
+            halign='center', valign='middle', font_size=dp(12),
+            color=(0.7, 0.7, 0.7, 1)
+        )
+        hint_lbl.bind(size=lambda s, v: setattr(s, 'text_size', (v[0], v[1])))
+        content.add_widget(hint_lbl)
+        
+        scroll = ScrollView()
+        list_layout = GridLayout(cols=1, size_hint_y=None, spacing=1)
+        list_layout.bind(minimum_height=list_layout.setter('height'))
+        
+        for gtin in sorted(missing_gtins):
+            cell = GridCell(text=gtin, size_hint_y=None, height=dp(30))
+            
+            # Функция обработки клика
+            def copy_to_clipboard(instance, touch):
+                if instance.collide_point(*touch.pos):
+                    Clipboard.copy(instance.text)  # Копируем GTIN в буфер
+                    
+                    original_text = instance.text
+                    original_color = instance.color
+                    
+                    # Меняем текст только на "Скопировано" и делаем его зеленым
+                    instance.text = "Скопировано"
+                    instance.color = (0.3, 1.0, 0.3, 1)
+                    
+                    # Через 1 секунду возвращаем исходный GTIN и белый цвет
+                    def reset_cell(dt):
+                        instance.text = original_text
+                        instance.color = original_color
+                        
+                    Clock.schedule_once(reset_cell, 1.0)
+                    return True
+                return False
+                
+            cell.bind(on_touch_down=copy_to_clipboard)
+            list_layout.add_widget(cell)
+            
+        scroll.add_widget(list_layout)
+        content.add_widget(scroll)
+        
+        note = Label(
+            text="Добавьте эти товары на вкладке «Товары» и повторите попытку.",
+            size_hint_y=None, height=dp(35),
+            halign='center', valign='middle', font_size=dp(13)
+        )
+        note.bind(size=lambda s, v: setattr(s, 'text_size', (v[0], v[1])))
+        content.add_widget(note)
+        
+        ok_btn = styled_button("Понятно", (0.2, 0.5, 0.8, 1), size_hint_y=None, height=dp(45))
+        content.add_widget(ok_btn)
+        
+        popup = Popup(
+            title="Недостающие товары",
+            content=content,
+            size_hint=(None, None),
+            size=(700, 500),
+            auto_dismiss=False
+        )
+        ok_btn.bind(on_release=popup.dismiss)
+        popup.open()
+
     def do_split(self, *args):
         if not self.file_path or not os.path.exists(self.file_path):
             self.show_feedback("Ошибка: выберите файл!", is_error=True)
@@ -115,6 +194,28 @@ class SplitterTab(BoxLayout):
         if not lines:
             self.show_feedback("Ошибка: файл пуст!", is_error=True)
             return
+
+        # --- ПРОВЕРКА: есть ли в файле товары, которых нет в базе ---
+        db_gtins = {gtin for _pid, _name, _vol, gtin in products if gtin}
+        pattern = re.compile(r'01(\d{14})')
+        found_gtins = set()
+        for line in lines:
+            found_gtins.update(pattern.findall(line))
+
+        missing = found_gtins - db_gtins
+        if missing:
+            self._show_missing_popup(missing)
+            self.results_layout.clear_widgets()
+            self.results_header.opacity = 0
+            self.summary_label.text = "Обнаружены товары, отсутствующие в базе. Файл не был разделён."
+            
+            # Убрали {len(missing)} из этого сообщения
+            self.show_feedback(
+                "Ошибка: найдены товары, отсутствующие в базе",
+                is_error=True
+            )
+            return
+        # ------------------------------------------------------------
 
         matched = {}
         for line in lines:
@@ -159,9 +260,7 @@ class SplitterTab(BoxLayout):
                 
             safe = sanitize_filename(display_name) or gtin
             
-            # --- ДОБАВЛЕНО ТИРЕ ПЕРЕД GTIN ---
             fname = f"{safe} ({len(codes)}) - {gtin}.txt"
-            # ---------------------------------
             
             path = os.path.join(out_dir, fname)
             

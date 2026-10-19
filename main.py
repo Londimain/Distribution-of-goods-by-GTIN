@@ -20,6 +20,9 @@ from kivy.core.window import Window
 from kivy.metrics import dp
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.tabbedpanel import TabbedPanel
+# main.py
+from kivy.config import Config
+Config.set('input', 'mouse', 'mouse,disable_multitouch')
 
 from widgets import CustomTab, styled_button
 from tab_products import ProductsTab

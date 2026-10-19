@@ -7,7 +7,9 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.popup import Popup
-from widgets import GridCell, styled_button
+
+# Добавлен импорт RightClickTextInput
+from widgets import GridCell, styled_button, RightClickTextInput
 from utils import normalize_gtin, show_msg
 import db
 
@@ -20,15 +22,21 @@ class ProductsTab(BoxLayout):
         form = BoxLayout(size_hint_y=None, height=dp(45), spacing=dp(10))
         
         form.add_widget(Label(text="Название:", size_hint_x=None, width=dp(80), halign='right', valign='middle', text_size=(dp(80), None)))
-        self.name_input = TextInput(multiline=False, halign='left', font_size=dp(16), padding=[dp(10), dp(13), dp(10), dp(13)])
+        
+        # Заменено на RightClickTextInput
+        self.name_input = RightClickTextInput(multiline=False, halign='left', font_size=dp(16), padding=[dp(10), dp(13), dp(10), dp(13)])
         form.add_widget(self.name_input)
         
         form.add_widget(Label(text="Объём:", size_hint_x=None, width=dp(60), halign='right', valign='middle', text_size=(dp(60), None)))
-        self.vol_input = TextInput(multiline=False, halign='left', font_size=dp(16), padding=[dp(10), dp(13), dp(10), dp(13)], size_hint_x=None, width=dp(100))
+        
+        # Заменено на RightClickTextInput
+        self.vol_input = RightClickTextInput(multiline=False, halign='left', font_size=dp(16), padding=[dp(10), dp(13), dp(10), dp(13)], size_hint_x=None, width=dp(100))
         form.add_widget(self.vol_input)
         
         form.add_widget(Label(text="GTIN:", size_hint_x=None, width=dp(60), halign='right', valign='middle', text_size=(dp(60), None)))
-        self.gtin_input = TextInput(multiline=False, input_filter='int', halign='left', font_size=dp(16), padding=[dp(10), dp(13), dp(10), dp(13)], size_hint_x=None, width=dp(180))
+        
+        # Заменено на RightClickTextInput (input_filter='int' оставлен для защиты от букв)
+        self.gtin_input = RightClickTextInput(multiline=False, input_filter='int', halign='left', font_size=dp(16), padding=[dp(10), dp(13), dp(10), dp(13)], size_hint_x=None, width=dp(180))
         form.add_widget(self.gtin_input)
         
         self.save_btn = styled_button("Добавить", (0.0, 0.4, 0.7, 1), size_hint_x=None, width=dp(120), font_size=dp(16))
@@ -47,7 +55,8 @@ class ProductsTab(BoxLayout):
         search_box = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
         search_box.add_widget(Label(text="Поиск:", size_hint_x=None, width=dp(80), halign='right', valign='middle', text_size=(dp(80), None)))
         
-        self.search_input = TextInput(
+        # Заменено на RightClickTextInput
+        self.search_input = RightClickTextInput(
             multiline=False, 
             halign='left', 
             font_size=dp(16), 

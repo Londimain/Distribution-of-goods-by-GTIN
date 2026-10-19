@@ -5,6 +5,36 @@ from kivy.uix.label import Label
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.tabbedpanel import TabbedPanelHeader
 from kivy.graphics import Color, Rectangle, Line
+# Убедитесь, что это есть в widgets.py:
+from kivy.uix.textinput import TextInput
+from kivy.base import EventLoop
+from kivy.core.clipboard import Clipboard
+
+class RightClickTextInput(TextInput):
+    def on_touch_down(self, touch):
+        # Если нажата правая кнопка мыши и клик был по этому полю
+        if touch.button == 'right' and self.collide_point(*touch.pos):
+            self.focus = True
+            
+            # Перемещаем курсор в ту точку, где был совершен клик
+            local_x, local_y = self.to_local(*touch.pos)
+            self.cursor = self.get_cursor_from_xy(local_x, local_y)
+            
+            # Получаем текст из буфера обмена
+            paste_text = Clipboard.paste()
+            if paste_text:
+                # Если в поле стоит фильтр только на цифры (как у GTIN), очищаем текст от букв
+                if self.input_filter == 'int':
+                    paste_text = ''.join(c for c in paste_text if c in '0123456789')
+                
+                # Вставляем текст
+                if paste_text:
+                    self.insert_text(paste_text)
+            
+            # Возвращаем True, чтобы Kivy не пытался показать стандартное меню
+            return True 
+            
+        return super().on_touch_down(touch)
 
 class FeedbackButton(Button):
     def __init__(self, text, color, **kwargs):
