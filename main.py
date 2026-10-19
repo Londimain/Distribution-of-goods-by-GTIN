@@ -39,7 +39,7 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 class SplitterApp(App):
-    title = "Распределение кодов по товарам"
+    title = "Распределение кодов по товарам v1.2.0"
 
     def build(self):
         # Устанавливаем иконку для окна и панели задач

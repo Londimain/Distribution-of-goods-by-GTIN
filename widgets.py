@@ -138,3 +138,40 @@ class FilePathBox(BoxLayout):
 
     def set_text(self, text):
         self.label.text = text
+        
+# Добавьте этот класс в конец файла widgets.py
+class DropZone(BoxLayout):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.padding = dp(20)
+        self.spacing = dp(10)
+        
+        with self.canvas.before:
+            self.bg_color = Color(0.18, 0.18, 0.18, 1)  # Темный фон
+            self.rect = Rectangle(pos=self.pos, size=self.size)
+            self.border_color = Color(0.3, 0.5, 0.7, 1) # Голубая рамка
+            self.line = Line(rectangle=(self.x, self.y, self.width, self.height), width=2)
+            
+        self.bind(pos=self.update_graphics, size=self.update_graphics)
+        
+        self.label = Label(
+            text="[b]Перетащите файл .txt сюда[/b]\n\nили используйте кнопку «Обзор файла»",
+            markup=True,
+            halign='center',
+            valign='middle',
+            color=(0.6, 0.6, 0.6, 1),
+            font_size=dp(16)
+        )
+        self.label.bind(size=lambda s, v: setattr(s, 'text_size', (v[0], v[1])))
+        self.add_widget(self.label)
+
+    def update_graphics(self, *args):
+        self.rect.pos = self.pos
+        self.rect.size = self.size
+        self.line.rectangle = (self.x, self.y, self.width, self.height)
+
+    def set_text(self, text, color=(0.6, 0.6, 0.6, 1), markup=True):
+        self.label.markup = markup
+        self.label.text = text
+        self.label.color = color

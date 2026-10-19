@@ -3,22 +3,26 @@ import os
 import re
 from kivy.clock import Clock
 from kivy.metrics import dp
+from kivy.core.window import Window  # Импортируем Window для Drag-and-Drop
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.gridlayout import GridLayout
-from widgets import GridCell, styled_button, FilePathBox
+from widgets import GridCell, styled_button, FilePathBox, DropZone  # Добавили DropZone
 from utils import sanitize_filename, read_lines
 from kivy.core.clipboard import Clipboard
 import db
 
 class SplitterTab(BoxLayout):
     def __init__(self, **kwargs):
-        super().__init__(orientation='vertical', padding=[dp(10), dp(40), dp(10), dp(10)], spacing=dp(15), **kwargs)
+        super().__init__(orientation='vertical', padding=[dp(10), dp(20), dp(10), dp(10)], spacing=dp(15), **kwargs)
         self.file_path = None
         self._reset_event = None # Таймер для возврата текста пути
+
+        # Привязываем глобальное событие перетаскивания файла в окно
+        Window.bind(on_drop_file=self._on_file_drop)
 
         top_container = BoxLayout(size_hint_y=None, height=dp(45))
         top_box = BoxLayout(size_hint_x=None, width=dp(650), pos_hint={'center_x': 0.5}, spacing=dp(10))
@@ -36,6 +40,10 @@ class SplitterTab(BoxLayout):
 
         top_container.add_widget(top_box)
         self.add_widget(top_container)
+
+        # --- НОВАЯ ЗОНА ДЛЯ ПЕРЕТАСКИВАНИЯ ФАЙЛА ---
+        self.drop_zone = DropZone(size_hint_y=None, height=dp(110))
+        self.add_widget(self.drop_zone)
 
         self.summary_label = Label(
             text="Выберите файл и нажмите «Разделить».",
@@ -58,6 +66,41 @@ class SplitterTab(BoxLayout):
         self.results_layout.bind(minimum_height=self.results_layout.setter('height'))
         scroll.add_widget(self.results_layout)
         self.add_widget(scroll)
+
+    def _update_file_display(self, file_path):
+        """Вспомогательный метод для обновления путей и визуального отображения"""
+        self.file_path = file_path
+        if self._reset_event:
+            self._reset_event.cancel()
+            
+        self.file_input.label.halign = 'left'
+        self.file_input.label.color = (1, 1, 1, 1)
+        self.file_input.set_text(self.file_path)
+        
+        # Обновляем зону Drag-and-Drop (показываем успех)
+        safe_name = os.path.basename(self.file_path)
+        self.drop_zone.set_text(f"Файл готов к работе:\n{safe_name}", color=(0.3, 1.0, 0.3, 1), markup=False)
+        
+        # Возвращаем исходный вид зоны через 4 секунды
+        def reset_dz(dt):
+            self.drop_zone.set_text("[b]Перетащите файл .txt сюда[/b]\n\nили используйте кнопку «Обзор файла»", color=(0.6, 0.6, 0.6, 1), markup=True)
+            
+        Clock.schedule_once(reset_dz, 4.0)
+
+    def _on_file_drop(self, window, file_path, x, y):
+        """Срабатывает при перетаскивании файла в окно программы"""
+        # В Kivy путь к файлу приходит в виде байтов, декодируем его
+        if isinstance(file_path, bytes):
+            file_path = file_path.decode('utf-8')
+            
+        # Проверяем расширение
+        if not file_path.lower().endswith('.txt'):
+            self.drop_zone.set_text("❌ Ошибка: нужен файл .txt", color=(1, 0.3, 0.3, 1), markup=False)
+            Clock.schedule_once(lambda dt: self.drop_zone.set_text("[b]Перетащите файл .txt сюда[/b]\n\nили используйте кнопку «Обзор файла»", color=(0.6, 0.6, 0.6, 1), markup=True), 3)
+            return
+            
+        # Обновляем интерфейс выбранным файлом
+        self._update_file_display(file_path)
 
     def show_feedback(self, text, is_error=False):
         """Показывает сообщение по центру поля с путем к файлу и скрывает его через 3 секунды."""
@@ -94,12 +137,8 @@ class SplitterTab(BoxLayout):
 
         def select(*a):
             if fc.selection:
-                self.file_path = fc.selection[0]
-                if self._reset_event:
-                    self._reset_event.cancel()
-                self.file_input.label.halign = 'left'
-                self.file_input.label.color = (1, 1, 1, 1)
-                self.file_input.set_text(self.file_path)
+                # Используем общий метод обновления интерфейса
+                self._update_file_display(fc.selection[0])
                 popup.dismiss()
 
         ok.bind(on_press=select)
@@ -117,7 +156,6 @@ class SplitterTab(BoxLayout):
         title_lbl.bind(size=lambda s, v: setattr(s, 'text_size', (v[0], v[1])))
         content.add_widget(title_lbl)
         
-        # Подсказка для пользователя
         hint_lbl = Label(
             text="(Нажмите на GTIN, чтобы скопировать)",
             size_hint_y=None, height=dp(20),
@@ -134,19 +172,15 @@ class SplitterTab(BoxLayout):
         for gtin in sorted(missing_gtins):
             cell = GridCell(text=gtin, size_hint_y=None, height=dp(30))
             
-            # Функция обработки клика
             def copy_to_clipboard(instance, touch):
                 if instance.collide_point(*touch.pos):
-                    Clipboard.copy(instance.text)  # Копируем GTIN в буфер
-                    
+                    Clipboard.copy(instance.text)
                     original_text = instance.text
                     original_color = instance.color
                     
-                    # Меняем текст только на "Скопировано" и делаем его зеленым
                     instance.text = "Скопировано"
                     instance.color = (0.3, 1.0, 0.3, 1)
                     
-                    # Через 1 секунду возвращаем исходный GTIN и белый цвет
                     def reset_cell(dt):
                         instance.text = original_text
                         instance.color = original_color
@@ -209,7 +243,6 @@ class SplitterTab(BoxLayout):
             self.results_header.opacity = 0
             self.summary_label.text = "Обнаружены товары, отсутствующие в базе. Файл не был разделён."
             
-            # Убрали {len(missing)} из этого сообщения
             self.show_feedback(
                 "Ошибка: найдены товары, отсутствующие в базе",
                 is_error=True
