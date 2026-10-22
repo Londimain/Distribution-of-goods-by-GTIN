@@ -3,12 +3,9 @@ import sqlite3
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
-from kivy.uix.textinput import TextInput
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.gridlayout import GridLayout
 from kivy.uix.popup import Popup
 
-# Добавлен импорт RightClickTextInput
 from widgets import GridCell, styled_button, RightClickTextInput
 from utils import normalize_gtin, show_msg
 import db
@@ -23,19 +20,16 @@ class ProductsTab(BoxLayout):
         
         form.add_widget(Label(text="Название:", size_hint_x=None, width=dp(80), halign='right', valign='middle', text_size=(dp(80), None)))
         
-        # Заменено на RightClickTextInput
         self.name_input = RightClickTextInput(multiline=False, halign='left', font_size=dp(16), padding=[dp(10), dp(13), dp(10), dp(13)])
         form.add_widget(self.name_input)
         
         form.add_widget(Label(text="Объём:", size_hint_x=None, width=dp(60), halign='right', valign='middle', text_size=(dp(60), None)))
         
-        # Заменено на RightClickTextInput
         self.vol_input = RightClickTextInput(multiline=False, halign='left', font_size=dp(16), padding=[dp(10), dp(13), dp(10), dp(13)], size_hint_x=None, width=dp(100))
         form.add_widget(self.vol_input)
         
         form.add_widget(Label(text="GTIN:", size_hint_x=None, width=dp(60), halign='right', valign='middle', text_size=(dp(60), None)))
         
-        # Заменено на RightClickTextInput (input_filter='int' оставлен для защиты от букв)
         self.gtin_input = RightClickTextInput(multiline=False, input_filter='int', halign='left', font_size=dp(16), padding=[dp(10), dp(13), dp(10), dp(13)], size_hint_x=None, width=dp(180))
         form.add_widget(self.gtin_input)
         
@@ -55,7 +49,6 @@ class ProductsTab(BoxLayout):
         search_box = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(10))
         search_box.add_widget(Label(text="Поиск:", size_hint_x=None, width=dp(80), halign='right', valign='middle', text_size=(dp(80), None)))
         
-        # Заменено на RightClickTextInput
         self.search_input = RightClickTextInput(
             multiline=False, 
             halign='left', 
@@ -77,40 +70,44 @@ class ProductsTab(BoxLayout):
         self.add_widget(header)
 
         # --- Список товаров (Таблица) ---
-        self.scroll_view = ScrollView()
-        self.list_layout = GridLayout(cols=1, size_hint_y=None, spacing=1)
+        # Отключаем эффект отскока для плавной прокрутки
+        self.scroll_view = ScrollView(effect_cls='ScrollEffect', do_scroll_x=False)
+        
+        # Используем BoxLayout вместо GridLayout для предотвращения "тряски"
+        self.list_layout = BoxLayout(orientation='vertical', size_hint_y=None, spacing=1)
         self.list_layout.bind(minimum_height=self.list_layout.setter('height'))
         self.scroll_view.add_widget(self.list_layout)
         self.add_widget(self.scroll_view)
 
-        self.refresh()
+        self.refresh(reset_scroll=True)
 
     def on_search(self, instance, value):
         """Вызывается при вводе текста в поисковую строку."""
-        self.refresh()
+        self.refresh(reset_scroll=True)
 
-    def refresh(self):
-        """Обновляет таблицу с учетом поискового запроса и сквозной нумерацией."""
+    def refresh(self, reset_scroll=False):
+        """Обновляет таблицу с учетом поискового запроса."""
+        # Запоминаем текущую позицию прокрутки
+        current_scroll = self.scroll_view.scroll_y
+        
         self.list_layout.clear_widgets()
         
         search_query = self.search_input.text.strip().lower()
         all_products = db.get_products()
         
-        # 1. Сначала фильтруем список товаров
+        # 1. Фильтрация
         filtered_products = []
         for pid, name, vol, gtin in all_products:
             if search_query:
-                # Ищем только по названию и GTIN (поиск по ID убран, т.к. номер теперь сквозной)
                 if (search_query not in name.lower() and 
                     search_query not in gtin.lower()):
                     continue
             filtered_products.append((pid, name, vol, gtin))
 
-        # 2. Выводим отфильтрованный список со сквозной нумерацией
+        # 2. Вывод
         for display_index, (pid, name, vol, gtin) in enumerate(filtered_products, start=1):
             row = BoxLayout(size_hint_y=None, height=dp(40), spacing=1)
             
-            # Отображаем сквозной порядковый номер (1, 2, 3...)
             row.add_widget(GridCell(text=str(display_index), size_hint_x=None, width=dp(50)))
             row.add_widget(GridCell(text=name, align='left'))
             row.add_widget(GridCell(text=vol, size_hint_x=None, width=dp(80)))
@@ -118,10 +115,8 @@ class ProductsTab(BoxLayout):
             
             btn_box = BoxLayout(spacing=1, size_hint_x=None, width=dp(200))
             eb = styled_button("Изменить", (0.2, 0.5, 0.9, 1))
-            # Для действий передаем скрытый настоящий pid
             eb.bind(on_press=lambda b, p=(pid, name, vol, gtin): self.start_edit(*p))
             db_btn = styled_button("Удалить", (0.9, 0.3, 0.3, 1))
-            # Для удаления передаем скрытый настоящий pid
             db_btn.bind(on_press=lambda b, p=pid: self.do_delete(p))
             btn_box.add_widget(eb)
             btn_box.add_widget(db_btn)
@@ -129,8 +124,11 @@ class ProductsTab(BoxLayout):
             row.add_widget(btn_box)
             self.list_layout.add_widget(row)
             
-        # Принудительно прокручиваем список в самый верх
-        self.scroll_view.scroll_y = 1.0
+        # Восстанавливаем или сбрасываем прокрутку
+        if reset_scroll:
+            self.scroll_view.scroll_y = 1.0
+        else:
+            self.scroll_view.scroll_y = current_scroll
 
     def start_edit(self, pid, name, vol, gtin):
         self.editing_id = pid
@@ -179,7 +177,9 @@ class ProductsTab(BoxLayout):
             self.name_input.text = ''
             self.vol_input.text = ''
             self.gtin_input.text = ''
-        self.refresh()
+        
+        # При добавлении нового товара прокручиваем вверх
+        self.refresh(reset_scroll=True)
 
     def do_delete(self, pid):
         content = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
@@ -199,7 +199,7 @@ class ProductsTab(BoxLayout):
         
         def confirm(*args):
             db.delete_product(pid)
-            self.refresh()
+            self.refresh(reset_scroll=False) # При удалении не прыгаем вверх, если не нужно
             popup.dismiss()
             
         yes_btn.bind(on_release=confirm)

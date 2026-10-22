@@ -1,7 +1,23 @@
 # -*- coding: utf-8 -*-
 import sqlite3
+import os
+import json
 
-DB_NAME = "products.db"
+# Функция для получения пути к БД (из settings.json или по умолчанию)
+def get_db_path():
+    settings_file = "settings.json"
+    if os.path.exists(settings_file):
+        try:
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                path = data.get('db_path', 'products.db')
+                if path:
+                    return path
+        except Exception:
+            pass
+    return "products.db"
+
+DB_NAME = get_db_path()
 
 def init_db():
     with sqlite3.connect(DB_NAME) as con:
@@ -33,3 +49,9 @@ def update_product(pid, name, volume, gtin):
 def delete_product(pid):
     with sqlite3.connect(DB_NAME) as con:
         con.execute("DELETE FROM products WHERE id=?", (pid,))
+
+def get_db_mtime():
+    """Возвращает время последнего изменения файла БД"""
+    if os.path.exists(DB_NAME):
+        return os.path.getmtime(DB_NAME)
+    return 0
